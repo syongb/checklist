@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>일일 체크리스트</title>
+  
+  <!-- 1. 스타일 및 폰트 라이브러리 로드 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://webfontworld.github.io/NanumSquareNeo/NanumSquareNeo.css">
+  
+  <!-- 2. React 및 Babel(JSX 컴파일러) CDN 로드 -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'NanumSquareNeo', sans-serif;
+    }
+    .font-nanum-bold {
+      font-family: 'NanumSquareNeo', sans-serif;
+      font-weight: 700;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+  <div id="root"></div>
+
+  <!-- 3. Firebase SDK 모듈식 로드 및 전역 객체 바인딩 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // React 스크립트에서 접근할 수 있도록 window 객체에 등록
+    window.FirebaseLib = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot };
+  </script>
+
+  <!-- 4. React 애플리케이션 핵심 로직 (Babel 컴파일) -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- [중요] 나만의 Firebase 설정값으로 변경하는 곳 ---
+    // 아래 데모 설정을 그대로 쓰면 데이터 저장이 안 될 수 있으니 가이드의 1단계를 거쳐서 발급받은 본인 키를 넣으세요!
+const firebaseConfig = {
+  apiKey: "AIzaSyBQUAUgSXZ_crOQveXQo-ST5ql0TU_W_lU",
+  authDomain: "my-checklist-59290.firebaseapp.com",
+  projectId: "my-checklist-59290",
+  storageBucket: "my-checklist-59290.firebasestorage.app",
+  messagingSenderId: "391498494235",
+  appId: "1:391498494235:web:283f1b614b4942141963be",
+  measurementId: "G-MEVY174YRW"
+};
+
+    const fb = window.FirebaseLib;
+    let app, auth, db;
+    
+    try {
+      app = fb.initializeApp(firebaseConfig);
+      auth = fb.getAuth(app);
+      db = fb.getFirestore(app);
+    } catch (e) {
+      console.error("Firebase 초기화 에러! 설정을 확인하세요.", e);
+    }
+
+    const appId = 'daily-checklist-app';
+
+    // SVG 아이콘 컴포넌트들 (외부 아이콘 라이브러리 로드 오류 원천 차단)
+    const IconPlus = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>;
+    const IconCheck = () => <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>;
+    const IconX = () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>;
+    const IconEdit = () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>;
+    const IconGrip = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" /></svg>;
+    const IconRestore = () => <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>;
+    const IconLogout = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>;
+    const IconCopy = () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376A8.965 8.965 0 0012 12.75a8.965 8.965 0 00-3.75 4.5m9 0a8.966 8.966 0 01-5.25-1.25M15 3h-6a3 3 0 00-3 3v12a3 3 0 003 3h6a3 3 0 003-3V6a3 3 0 00-3-3z" /></svg>;
+    const IconCheckCircle = ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+
+    const generateSyncCode = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let result = '';
+      for (let i = 0; i < 5; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    const getTodayKST = () => {
+      const date = new Date();
+      date.setHours(date.getHours() + 9);
+      return date.toISOString().split('T')[0];
+    };
+
+    function App() {
+      const [user, setUser] = useState(null);
+      const [syncCode, setSyncCode] = useState(() => localStorage.getItem('checklist_sync_code') || '');
+      const [isJoined, setIsJoined] = useState(!!localStorage.getItem('checklist_sync_code'));
+      const [joinInput, setJoinInput] = useState('');
+      
+      const [items, setItems] = useState([]);
+      const [inputValue, setInputValue] = useState('');
+      const [editingId, setEditingId] = useState(null);
+      const [editValue, setEditValue] = useState('');
+      
+      const [confirmModal, setConfirmModal] = useState({ isOpen: false, item: null });
+      const [copiedText, setCopiedText] = useState(false);
+      
+      const dragItem = useRef(null);
+      const dragOverItem = useRef(null);
+
+      // 1. Auth Setup
+      useEffect(() => {
+        if (!fb) return;
+        const initAuth = async () => {
+          try {
+            await fb.signInAnonymously(auth);
+          } catch (error) {
+            console.error("인증 처리 도중 에러가 발생했습니다:", error);
+          }
+        };
+        initAuth();
+        const unsubscribe = fb.onAuthStateChanged(auth, setUser);
+        return () => unsubscribe();
+      }, []);
+
+      // 2. Firestore 실시간 동기화 및 자정 리셋
+      useEffect(() => {
+        if (!user || !isJoined || !syncCode || !fb) return;
+
+        const collectionRef = fb.collection(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`);
+        
+        const unsubscribe = fb.onSnapshot(collectionRef, (snapshot) => {
+          const today = getTodayKST();
+          let fetchedItems = [];
+          let itemsToDelete = [];
+
+          snapshot.docs.forEach(document => {
+            const data = document.data();
+            if (data.date !== today) {
+              itemsToDelete.push(document.id);
+            } else {
+              fetchedItems.push({ id: document.id, ...data });
+            }
+          });
+
+          if (itemsToDelete.length > 0) {
+            itemsToDelete.forEach(id => {
+              fb.deleteDoc(fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, id));
+            });
+          }
+
+          fetchedItems.sort((a, b) => (a.order || 0) - (b.order || 0));
+          setItems(fetchedItems);
+        }, (error) => {
+          console.error("데이터 동기화 실패:", error);
+        });
+
+        return () => unsubscribe();
+      }, [user, isJoined, syncCode]);
+
+      // 3. 기능 제어 함수들
+      const handleJoin = (codeToJoin) => {
+        const cleaned = codeToJoin.trim();
+        if (cleaned.length === 5) {
+          setSyncCode(cleaned);
+          setIsJoined(true);
+          localStorage.setItem('checklist_sync_code', cleaned);
+        }
+      };
+
+      const handleCreateNew = () => {
+        const newCode = generateSyncCode();
+        handleJoin(newCode);
+      };
+
+      const handleLogout = () => {
+        setIsJoined(false);
+        setSyncCode('');
+        localStorage.removeItem('checklist_sync_code');
+        setItems([]);
+      };
+
+      const copyToClipboard = () => {
+        const textArea = document.createElement("textarea");
+        textArea.value = syncCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        setCopiedText(true);
+        setTimeout(() => setCopiedText(false), 2000);
+      };
+
+      const handleAddItem = async () => {
+        if (!inputValue.trim() || !user || !syncCode || !fb) return;
+
+        const newItemId = Date.now().toString();
+        const newItem = {
+          text: inputValue.trim(),
+          completed: false,
+          date: getTodayKST(),
+          order: items.length > 0 ? Math.max(...items.map(i => i.order)) + 1 : 0
+        };
+
+        setInputValue('');
+        try {
+          const docRef = fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, newItemId);
+          await fb.setDoc(docRef, newItem);
+        } catch (error) {
+          console.error("할 일 등록 실패:", error);
+        }
+      };
+
+      const handleEditSave = async (id) => {
+        if (!editValue.trim() || !user || !syncCode || !fb) {
+          setEditingId(null);
+          return;
+        }
+        try {
+          const docRef = fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, id);
+          await fb.updateDoc(docRef, { text: editValue.trim() });
+          setEditingId(null);
+        } catch (error) {
+          console.error("수정 실패:", error);
+        }
+      };
+
+      const promptComplete = (item) => {
+        setConfirmModal({ isOpen: true, item });
+      };
+
+      const handleComplete = async () => {
+        if (!confirmModal.item || !user || !syncCode || !fb) return;
+        const { id } = confirmModal.item;
+        
+        try {
+          const docRef = fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, id);
+          const newOrder = items.length > 0 ? Math.max(...items.map(i => i.order)) + 1 : 0;
+          await fb.updateDoc(docRef, { completed: true, order: newOrder });
+        } catch (error) {
+          console.error("완료 처리 오류:", error);
+        } finally {
+          setConfirmModal({ isOpen: false, item: null });
+        }
+      };
+
+      const handleRestore = async (id) => {
+        if (!user || !syncCode || !fb) return;
+        try {
+          const docRef = fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, id);
+          const uncompletedItems = items.filter(i => !i.completed);
+          const newOrder = uncompletedItems.length > 0 ? Math.max(...uncompletedItems.map(i => i.order)) + 1 : 0;
+          
+          await fb.updateDoc(docRef, { completed: false, order: newOrder });
+        } catch (error) {
+          console.error("복원 실패:", error);
+        }
+      };
+
+      const handleDelete = async (id) => {
+        if (!user || !syncCode || !fb) return;
+        try {
+          await fb.deleteDoc(fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, id));
+        } catch (error) {
+          console.error("삭제 실패:", error);
+        }
+      };
+
+      // Drag & Drop
+      const handleDragStart = (e, index) => {
+        dragItem.current = index;
+        setTimeout(() => { e.target.classList.add('opacity-40'); }, 0);
+      };
+
+      const handleDragEnter = (e, index) => {
+        dragOverItem.current = index;
+        e.preventDefault();
+      };
+
+      const handleDragEnd = async (e) => {
+        e.target.classList.remove('opacity-40');
+        if (dragItem.current === null || dragOverItem.current === null) return;
+        if (dragItem.current === dragOverItem.current) return;
+
+        const draggedIsCompleted = items[dragItem.current].completed;
+        const targetItem = items[dragOverItem.current];
+        
+        if (draggedIsCompleted !== targetItem.completed) {
+          dragItem.current = null;
+          dragOverItem.current = null;
+          return;
+        }
+
+        const newItems = [...items];
+        const draggedItemContent = newItems.splice(dragItem.current, 1)[0];
+        newItems.splice(dragOverItem.current, 0, draggedItemContent);
+
+        newItems.forEach((item, index) => {
+          item.order = index;
+        });
+
+        setItems(newItems);
+        dragItem.current = null;
+        dragOverItem.current = null;
+
+        try {
+          for (const item of newItems) {
+             const docRef = fb.doc(db, 'artifacts', appId, 'public', 'data', `checklist_${syncCode}`, item.id);
+             await fb.updateDoc(docRef, { order: item.order });
+          }
+        } catch (error) {
+          console.error("순서 정렬 업데이트 실패:", error);
+        }
+      };
+
+      const uncompletedItems = items.filter(item => !item.completed);
+      const completedItems = items.filter(item => item.completed);
+
+      // 미등록 / 비동기 코드 미생성 시
+      if (!isJoined) {
+        return (
+          <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col">
+              <div className="bg-indigo-600 p-8 text-center text-white">
+                <IconCheckCircle className="w-16 h-16 mx-auto mb-4 opacity-90" />
+                <h1 className="text-3xl font-nanum-bold tracking-tight">일일 체크리스트</h1>
+                <p className="mt-2 text-indigo-100 font-medium">기기 간 연동되는 스마트한 하루 관리</p>
+              </div>
+              
+              <div className="p-8 space-y-6">
+                <div>
+                  <label className="block text-sm font-nanum-bold text-gray-700 mb-2">동기화 코드 입력</label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      maxLength={5}
+                      placeholder="5자리 코드"
+                      className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 font-nanum-bold focus:border-indigo-500 focus:ring-0 outline-none uppercase"
+                      value={joinInput}
+                      onChange={(e) => setJoinInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleJoin(joinInput)}
+                    />
+                    <button
+                      onClick={() => handleJoin(joinInput)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 rounded-xl font-nanum-bold transition-colors"
+                    >
+                      연동
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500 font-nanum-bold">또는</span>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleCreateNew}
+                  className="w-full border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 py-3 rounded-xl font-nanum-bold transition-colors"
+                >
+                  새로운 기기 연동 코드 생성
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-gray-50 flex justify-center text-gray-800">
+          <div className="w-full max-w-md bg-white shadow-xl flex flex-col h-screen overflow-hidden relative">
+            
+            {/* Header */}
+            <header className="bg-white border-b border-gray-100 p-4 flex items-center justify-between sticky top-0 z-10">
+              <h1 className="text-xl font-nanum-bold text-gray-900 flex items-center">
+                <IconCheckCircle className="w-6 h-6 text-indigo-600 mr-2" />
+                일일 체크리스트
+              </h1>
+              <div className="flex items-center space-x-2">
+                <button onClick={copyToClipboard} className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                  <span className="text-sm font-nanum-bold text-indigo-600 tracking-wider">{syncCode}</span>
+                  {copiedText ? <span className="text-xs text-green-500 font-nanum-bold">복사됨</span> : <IconCopy />}
+                </button>
+                <button onClick={handleLogout} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors">
+                  <IconLogout />
+                </button>
+              </div>
+            </header>
+
+            {/* Scrollable List */}
+            <main className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-24">
+              {uncompletedItems.length === 0 && completedItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                  <IconCheckCircle className="w-16 h-16 mb-4 opacity-20 text-gray-400" />
+                  <p className="font-nanum-bold text-lg text-gray-500">오늘의 할 일을 추가해보세요!</p>
+                  <p className="text-sm mt-2 opacity-70">자정이 되면 목록이 자동으로 초기화됩니다.</p>
+                </div>
+              )}
+
+              {/* Uncompleted Items */}
+              <div className="space-y-2">
+                {uncompletedItems.map((item, index) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, items.findIndex(i => i.id === item.id))}
+                    onDragEnter={(e) => handleDragEnter(e, items.findIndex(i => i.id === item.id))}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => e.preventDefault()}
+                    className="group flex items-center bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+                  >
+                    <div className="mr-3 cursor-grab text-gray-300 hover:text-gray-500 touch-none">
+                      <IconGrip />
+                    </div>
+                    
+                    <button
+                      onClick={() => promptComplete(item)}
+                      className="mr-3 w-6 h-6 rounded border-2 border-gray-300 flex-shrink-0 hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center"
+                    >
+                    </button>
+
+                    {editingId === item.id ? (
+                      <input
+                        type="text"
+                        className="flex-1 outline-none border-b-2 border-indigo-500 font-nanum-bold text-gray-800 bg-transparent px-1"
+                        value={editValue}
+                        autoFocus
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => handleEditSave(item.id)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleEditSave(item.id)}
+                      />
+                    ) : (
+                      <span
+                        className="flex-1 font-nanum-bold text-gray-800 truncate select-none cursor-pointer"
+                        onClick={() => { setEditingId(item.id); setEditValue(item.text); }}
+                      >
+                        {item.text}
+                      </span>
+                    )}
+
+                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                      <button onClick={() => { setEditingId(item.id); setEditValue(item.text); }} className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg">
+                        <IconEdit />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg">
+                        <IconX />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Completed Items */}
+              {completedItems.length > 0 && (
+                <div className="space-y-2 pt-4 border-t border-gray-100">
+                  <h3 className="text-xs font-nanum-bold text-gray-400 px-2 uppercase tracking-wider mb-3">완료됨</h3>
+                  {completedItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, items.findIndex(i => i.id === item.id))}
+                      onDragEnter={(e) => handleDragEnter(e, items.findIndex(i => i.id === item.id))}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => e.preventDefault()}
+                      className="group flex items-center bg-gray-50 border border-transparent rounded-xl p-3 opacity-60 hover:opacity-100 transition-all cursor-grab active:cursor-grabbing"
+                    >
+                      <div className="mr-3 cursor-grab text-gray-300 touch-none">
+                        <IconGrip />
+                      </div>
+                      
+                      <div className="mr-3 w-6 h-6 rounded bg-indigo-500 flex-shrink-0 flex items-center justify-center">
+                        <IconCheck />
+                      </div>
+
+                      <span className="flex-1 font-nanum text-gray-500 line-through truncate select-none">
+                        {item.text}
+                      </span>
+
+                      <div className="flex space-x-1 ml-2">
+                        <button onClick={() => handleRestore(item.id)} className="px-2 py-1 text-xs font-nanum-bold bg-white text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 flex items-center">
+                          <IconRestore /> 복원
+                        </button>
+                        <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                          <IconX />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </main>
+
+            {/* Input Area (Fixed Bottom) */}
+            <footer className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-6 border-t-0">
+              <div className="flex items-center space-x-2 bg-white rounded-full shadow-[0_0_15px_rgba(0,0,0,0.1)] border border-gray-100 p-2 relative z-20">
+                <input
+                  type="text"
+                  placeholder="새로운 할 일 추가..."
+                  className="flex-1 bg-transparent px-4 py-2 font-nanum outline-none text-gray-800 placeholder-gray-400"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+                />
+                <button
+                  onClick={handleAddItem}
+                  disabled={!inputValue.trim()}
+                  className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 transition-colors flex-shrink-0"
+                >
+                  <IconPlus />
+                </button>
+              </div>
+            </footer>
+
+            {/* Custom Confirm Modal */}
+            {confirmModal.isOpen && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                  <h3 className="font-nanum-bold text-lg text-gray-900 mb-2">완료하시겠습니까?</h3>
+                  <p className="font-nanum text-gray-500 text-sm mb-6 truncate">"{confirmModal.item?.text}"</p>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setConfirmModal({ isOpen: false, item: null })}
+                      className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-nanum-bold hover:bg-gray-200 transition-colors"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleComplete}
+                      className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-nanum-bold hover:bg-indigo-700 transition-colors"
+                    >
+                      확인
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
