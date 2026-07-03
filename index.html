@@ -173,12 +173,18 @@ const firebaseConfig = {
           return;
         }
         
+        // 🚨 새로 추가된 부분: 로그인(익명)이 완료되기 전 클릭 방지
+        if (!user) {
+          setJoinError("서버와 연결 중입니다. 잠시만 기다려주세요.");
+          return;
+        }
+        
         setJoinError('');
         setIsJoining(true);
 
         try {
-          // 세션 문서가 존재하는지 먼저 확인합니다.
-          const sessionRef = fb.doc(db, 'artifacts', appId, 'public', 'sessions', cleaned);
+          // 🚨 수정된 부분: 문서 경로를 반드시 짝수(data 폴더 추가)로 맞춰서 에러 원천 차단!
+          const sessionRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'sessions', cleaned);
           const sessionSnap = await fb.getDoc(sessionRef);
 
           if (sessionSnap.exists()) {
@@ -200,13 +206,19 @@ const firebaseConfig = {
 
       // [수정] 방 생성 시 DB에 세션(방) 기록을 남김
       const handleCreateNew = async () => {
+        // 🚨 새로 추가된 부분: 로그인(익명)이 완료되기 전 클릭 방지
+        if (!user) {
+          setJoinError("서버와 연결 중입니다. 잠시만 기다려주세요.");
+          return;
+        }
+
         setIsJoining(true);
         setJoinError('');
         const newCode = generateSyncCode();
         
         try {
-          // 방이 생성되었다는 기록을 sessions 컬렉션에 남깁니다.
-          const sessionRef = fb.doc(db, 'artifacts', appId, 'public', 'sessions', newCode);
+          // 🚨 수정된 부분: 문서 경로를 반드시 짝수(data 폴더 추가)로 맞춰서 에러 원천 차단!
+          const sessionRef = fb.doc(db, 'artifacts', appId, 'public', 'data', 'sessions', newCode);
           await fb.setDoc(sessionRef, {
             createdAt: Date.now()
           });
