@@ -45,15 +45,15 @@
     const { useState, useEffect, useRef } = React;
 
     // --- [중요] 나만의 Firebase 설정값으로 변경하는 곳 ---
-const firebaseConfig = {
-  apiKey: "AIzaSyBQUAUgSXZ_crOQveXQo-ST5ql0TU_W_lU",
-  authDomain: "my-checklist-59290.firebaseapp.com",
-  projectId: "my-checklist-59290",
-  storageBucket: "my-checklist-59290.firebasestorage.app",
-  messagingSenderId: "391498494235",
-  appId: "1:391498494235:web:283f1b614b4942141963be",
-  measurementId: "G-MEVY174YRW"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyBQUAUgSXZ_crOQveXQo-ST5ql0TU_W_lU",
+      authDomain: "my-checklist-59290.firebaseapp.com",
+      projectId: "my-checklist-59290",
+      storageBucket: "my-checklist-59290.firebasestorage.app",
+      messagingSenderId: "391498494235",
+      appId: "1:391498494235:web:283f1b614b4942141963be",
+      measurementId: "G-MEVY174YRW"
+    };
 
     const fb = window.FirebaseLib;
     let app, auth, db;
@@ -394,7 +394,6 @@ const firebaseConfig = {
               <div className="p-8 space-y-6">
                 <div>
                   <label className="block text-sm font-nanum-bold text-gray-700 mb-2">동기화 코드 입력</label>
-                  {/* [수정] flex-row 강제 유지(gap-2), 버튼 크기 축소 방지(shrink-0), 대문자(uppercase) 클래스 제거 */}
                   <div className="flex flex-row gap-2">
                     <input
                       type="text"
@@ -414,7 +413,6 @@ const firebaseConfig = {
                       {isJoining ? '확인 중...' : '연동'}
                     </button>
                   </div>
-                  {/* [수정] 에러 메시지 표시 영역 추가 */}
                   {joinError && (
                     <p className="mt-2 text-sm text-red-500 font-nanum-bold">{joinError}</p>
                   )}
